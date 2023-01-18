@@ -190,7 +190,6 @@ void MavlinkBase::putc(char c)
 		    // Need to recalculate CRC
 		    uint16_t crc = fmav_crc_calculate(&(buf_link_in[1]), FASTMAVLINK_HEADER_V2_LEN - 1);
 		    fmav_crc_accumulate_buf(&crc, msg_serial_out.payload, msg_serial_out.len);
-		    //uint16_t crc = fmav_crc_calculate(&(buf_link_in[1]), FASTMAVLINK_HEADER_V2_LEN - 1 + msg_serial_out.len);
 		    fmav_crc_accumulate(&crc, msg_serial_out.crc_extra);
 		    msg_serial_out.checksum = crc;
                 }
