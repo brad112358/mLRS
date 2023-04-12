@@ -104,8 +104,8 @@ bool led_state;
 unsigned long led_tlast_us;
 bool is_connected;
 unsigned long is_connected_tlast_us;
-unsigned long tlast_received_us;
-unsigned long tfirst_received_us;
+unsigned long tlast_received_serial_us;
+unsigned long tfirst_received_serial_us;
 int avail_last;
 
 
@@ -166,8 +166,8 @@ void setup()
     is_connected = false;
     is_connected_tlast_us = 0;
 
-    tlast_received_us = 0;
-    tfirst_received_us = 0;
+    tlast_received_serial_us = 0;
+    tfirst_received_serial_us = 0;
     avail_last = 0;
     
     serialFlushRx();
@@ -209,7 +209,7 @@ void loop()
     // And don't allow any data to remain in the serial buffer for more than about 22ms to constrain latency (just in case).
     // Also constrain to a maximum UDP payload and serial buffer use of just over 255 bytes (only needed for low baud rate).
     if (avail_last > 0) // data was waiting
-        if (((avail == avail_last) && (tnow_us - tlast_received_us > 600)) || (tnow_us - tfirst_received_us > 22000) || (avail > 255)) {
+        if (((avail == avail_last) && (tnow_us - tlast_received_serial_us > 600)) || (tnow_us - tfirst_received_serial_us > 22000) || (avail > 255)) {
             int len = SERIAL.read(buf, sizeof(buf));
             udp.beginPacket(ip_udp, port_udp);
             udp.write(buf, len);
@@ -219,10 +219,10 @@ void loop()
 
     if (avail != avail_last) { // We received something new
         if (0 == avail_last) { // First byte received
-            tfirst_received_us = tnow_us;
+            tfirst_received_serial_us = tnow_us;
         }
         // Keep track of the time we last received something
-        tlast_received_us = tnow_us;
+        tlast_received_serial_us = tnow_us;
         avail_last = avail;
     }
 
