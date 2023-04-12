@@ -63,7 +63,7 @@ int port_tcp = 5760; // connect to this port per TCP // MissionPlanner default i
 int port_udp = 14550; // connect to this port per UDP // MissionPlanner default is 14550
 
 // baudrate
-int baudrate = 57600;
+int baudrate = 115200; // Higher baudrate -> lower latency
 
 // WiFi channel
 // 1 is the default, 13 (2461-2483 MHz) has the least overlap with mLRS 2.4 GHz frequencies.
@@ -106,13 +106,14 @@ WiFiServer server(port_tcp);
 WiFiClient client;
 #endif
 
-int led_tlast_ms;
+int led_tlast_us;
 bool led_state;
 
 bool is_connected;
-unsigned long is_connected_tlast_ms;
-unsigned long send_tlast_ms;
-
+unsigned long is_connected_tlast_us;
+unsigned long tlast_received_us;
+unsigned long tfirst_received_us;
+int avail_last;
 
 void serialFlushRx(void)
 {
@@ -165,31 +166,34 @@ void setup()
     udp.begin(port_udp);
 #endif    
 
-    led_tlast_ms = 0;
+    led_tlast_us = 0;
     led_state = false;
 
     is_connected = false;
-    is_connected_tlast_ms = 0;
-    send_tlast_ms = 0;
+    is_connected_tlast_us = 0;
+    tlast_received_us = 0;
+    tfirst_received_us = 0;
+    avail_last = 0;
+    
     serialFlushRx();
 }
 
 
 void loop() 
 {
-    unsigned long tnow_ms = millis();
-    if (is_connected && (tnow_ms - is_connected_tlast_ms > 2000)) { // nothing from GCS for 2 secs
+    unsigned long tnow_us = micros();
+    if (is_connected && (tnow_us - is_connected_tlast_us > 2000000)) { // nothing from GCS for 2 secs
         is_connected = false;
     }
-    if (tnow_ms - led_tlast_ms > (is_connected ? 500 : 200)) {
-        led_tlast_ms = tnow_ms;
+    if (tnow_us - led_tlast_us > (is_connected ? 500000 : 200000)) {
+        led_tlast_us = tnow_us;
         led_state = !led_state;
         if (led_state) led_on(); else led_off();
     }
 
     //-- here comes the core code, handle wifi connection and do the bridge
 
-    uint8_t buf[256]; // working buffer
+    uint8_t buf[512]; // working buffer
 
 #if WIFI_PROTOCOL == 1 // UDP
 
@@ -198,17 +202,32 @@ void loop()
         int len = udp.read(buf, sizeof(buf));
         SERIAL.write(buf, len);
         is_connected = true;
-        is_connected_tlast_ms = millis();;
+        is_connected_tlast_us = micros();;
     }
+    
     int avail = SERIAL.available();
-    // Don't send nearly empty messages so often
-    if ((avail > 90) || (avail && (tnow_ms - send_tlast_ms > 15))) {
-        int len = SERIAL.read(buf, sizeof(buf));
-        udp.beginPacket(ip_udp, port_udp);
-        udp.write(buf, len);
-        udp.endPacket();
-        send_tlast_ms = tnow_ms;
-    }   
+    // Wait for serial port to be idle for 600us before sending. Best if > byte time , < loop time.
+    // Since mLRS sends us one or more full MAVLink messages at a time,
+    // this should result in alligning the start of the UDP payload to the start of a MAVLink message.
+    // And don't allow any data to remain in the serial buffer for more than about 22ms to constrain latency (just in case).
+    // Also constrain to a maximum UDP payload and serial buffer use of just over 255 bytes (only needed for low baud rate).
+    if (avail_last > 0) // data was waiting
+        if (((avail == avail_last) && (tnow_us - tlast_received_us > 600)) || (tnow_us - tfirst_received_us > 22000) || (avail > 255)) {
+            int len = SERIAL.read(buf, sizeof(buf));
+            udp.beginPacket(ip_udp, port_udp);
+            udp.write(buf, len);
+            udp.endPacket();
+            avail_last = 0;
+        }
+
+    if (avail != avail_last) { // We received something new
+        if (0 == avail_last) { // First byte received
+            tfirst_received_us = tnow_us;
+        }
+        // Keep track of the time we last received something
+        tlast_received_us = tnow_us;
+        avail_last = avail;
+    }
 
 #else // TCP
 
@@ -236,7 +255,7 @@ void loop()
         int len = client.read(buf, sizeof(buf));
         SERIAL.write(buf, len);
         is_connected = true;
-        is_connected_tlast_ms = millis();;
+        is_connected_tlast_us = micros();;
     }
 
     while (SERIAL.available()) {
