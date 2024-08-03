@@ -64,7 +64,7 @@
 #define DEVICE_HAS_NO_DEBUG
 
 #define DEVICE_HAS_SINGLE_LED
-#define DEVICE_HAS_I2C_DISPLAY_ROT180
+#define DEVICE_HAS_I2C_DISPLAY
 //#define DEVICE_HAS_FIVEWAY
 #define DEVICE_HAS_FAN_ONOFF // board has a Fan, which can be set on or off
 #define DEVICE_HAS_ESP_WIFI_BRIDGE_ON_SERIAL2

@@ -142,10 +142,10 @@ static const uint8_t ssd1306_initstream[] = {
     0xD3, 0x00,   // Display Offset
     0x40,         // Display Start Line
     0x8D, 0x14,   // enable charge pump regulator
-    0x20, 0x00,   // Memory Addressing Mode
+    0x20, 0x10,   // Memory Addressing Mode
     0xA1,         // Segment re-map
     0xC8,         // COM Output Scan Direction
-    0xDA, 0x12,   // COM Pins hardware configuration
+    //0xDA, 0x12,   // COM Pins hardware configuration
     0x81, 0xCF,   // Contrast Control
     0xD9, 0xF1,   // Pre-charge Period
     0xDB, 0x40,   // VCOMH Deselect Level
@@ -153,8 +153,6 @@ static const uint8_t ssd1306_initstream[] = {
     0xA4,         // Entire Display ON
     0xA6,         // Normal/Inverse Display
     0xAF,         // Display ON
-    0x21, 0, 127, // Column Address
-    0x22, 0, 7    // Page Address
 };
 
 
@@ -171,13 +169,12 @@ void ssd1306_cmd2(uint8_t _cmd, uint8_t _data)
     i2c_put_blocked(SSD1306_CMD, cmd, 2);
 }
 
-
-void ssd1306_cmdhome(void)
+void ssd1306_cmdpage(uint8_t page)
 {
-    uint8_t cmd[6] = {0x21, 0, 127, 0x22, 0, 7};
-//    i2c_put_blocked(SSD1306_CMD, cmd, 6);
-    i2c_put_blocked(SSD1306_CMD, cmd + 0, 3);
-    i2c_put_blocked(SSD1306_CMD, cmd + 3, 3);
+    uint8_t cmd[3] = {0x00, 0x10, 0xB0};
+
+    cmd[2] = 0xB0 + page;
+    i2c_put(SSD1306_CMD, cmd, 3);
 }
 
 
@@ -212,8 +209,16 @@ HAL_StatusTypeDef ssd1306_put(uint8_t* buf, uint16_t len)
 
 HAL_StatusTypeDef ssd1306_put_noblock(uint8_t* buf, uint16_t len)
 {
-    ssd1306_cmdhome();
-    return i2c_put(SSD1306_DATA, buf, len);
+    HAL_StatusTypeDef ret = HAL_OK;
+    uint8_t page = 0;
+    while ((len > 0) && (ret == HAL_OK)) {
+	ssd1306_cmdpage(page);
+	ret = i2c_put(SSD1306_DATA, buf, MIN(128,len));
+	page++;
+	buf += 128;
+	len -= 128;
+    }
+    return ret;
 }
 
 
@@ -237,16 +242,6 @@ void gdisp_hal_init(uint16_t type)
         case GDISPLAY_TYPE_SH1106: break;
     }
 }
-
-
-void gdisp_hal_cmdhome(void)
-{
-    switch (gdisp.type) {
-        case GDISPLAY_TYPE_SSD1306: ssd1306_cmdhome(); return;
-        case GDISPLAY_TYPE_SH1106: return;
-    }
-}
-
 
 HAL_StatusTypeDef gdisp_hal_put(uint8_t* buf, uint16_t len)
 {
@@ -300,12 +295,7 @@ void gdisp_update(void)
 
     if (!gdisp.needsupdate) return;
 
-    //gdisp_hal_cmdhome(); // does not appear to make a difference
-
     HAL_StatusTypeDef res = gdisp_hal_put(gdisp.buf, GDISPLAY_BUFSIZE);
-//    HAL_StatusTypeDef res = ssd1306_put(gdisp.buf, GDISPLAY_BUFSIZE);
-//    HAL_StatusTypeDef res = ssd1306_put_noblock(gdisp.buf, GDISPLAY_BUFSIZE);
-//    while (i2c_device_ready() == HAL_BUSY) {};
 
     if (res != HAL_OK) return; // retry, needs update is not reset, so it will tried the next time again
 

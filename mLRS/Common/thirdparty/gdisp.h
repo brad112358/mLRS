@@ -53,7 +53,7 @@ HAL_StatusTypeDef i2c_put(uint8_t reg_adr, uint8_t* buf, uint16_t len);
 
 void ssd1306_init();
 void ssd1306_cmd2(uint8_t _cmd, uint8_t _data);
-void ssd1306_cmdhome(void);
+    //void ssd1306_cmdhome(void);
 void ssd1306_contraststart(void);
 void ssd1306_contrastend(void);
 void ssd1306_contrast(uint8_t c);
@@ -125,7 +125,7 @@ typedef struct
 //-------------------------------------------------------
 
 void gdisp_hal_init(uint16_t type);
-void gdisp_hal_cmdhome(void);
+    //void gdisp_hal_cmdhome(void);
 HAL_StatusTypeDef gdisp_hal_put(uint8_t* buf, uint16_t len);
 void gdisp_hal_contraststart(void);
 void gdisp_hal_contrastend(void);
