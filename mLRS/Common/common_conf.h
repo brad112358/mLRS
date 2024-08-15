@@ -11,8 +11,8 @@
 #pragma once
 
 
-#define VERSION             10205 // leading zero makes it octal!
-#define VERSIONONLYSTR      "v1.2.05"
+#define VERSION             10301 // leading zero makes it octal!
+#define VERSIONONLYSTR      "v1.3.01"
 #define SETUPLAYOUT         335 // this should be changed then Setup struct and/or serial changes
 
 
@@ -63,7 +63,7 @@
 #define SETUP_TX_MAV_COMPONENT          1 // 0: off, 1: enabled
 
 #define SETUP_TX_BUZZER                 0 // 0: off, 1: LP, 2: rxLQ
-#define SETUP_TX_CLI_LINE_END           0 // 0: CR, 1: LF, 2: CRLF
+#define SETUP_TX_CLI_LINE_END           0 // 0: CRLF, 1: LF, 2: CR
 
 
 #define SETUP_RX_CHANNEL_ORDER          CHANNEL_ORDER_AETR

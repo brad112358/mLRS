@@ -337,8 +337,8 @@ void tTxCli::Init(tSerialBase* _comport)
 
     initialized = (com != nullptr) ? true : false;
 
-    line_end = CLI_LINE_END_CR;
-    strcpy(ret, "\r");
+    line_end = CLI_LINE_END_CRLF;
+    strcpy(ret, "\r\n");
 
     pos = 0;
     buf[pos] = '\0';
@@ -360,9 +360,9 @@ void tTxCli::Set(uint8_t new_line_end)
     line_end = new_line_end;
 
     switch (line_end) {
-    case CLI_LINE_END_CR: strcpy(ret, "\r"); break;
-    case CLI_LINE_END_LF: strcpy(ret, "\n"); break;
     case CLI_LINE_END_CRLF: strcpy(ret, "\r\n"); break;
+    case CLI_LINE_END_LF: strcpy(ret, "\n"); break;
+    case CLI_LINE_END_CR: strcpy(ret, "\r"); break;
     }
 }
 
@@ -675,6 +675,10 @@ void tTxCli::print_help(void)
     putsn("  esppt       -> enter serial passthrough");
     putsn("  espboot     -> reboot ESP and enter serial passthrough");
 #endif
+#ifdef USE_HC04_MODULE
+    putsn("  hc04 pt       -> enter serial passthrough");
+    putsn("  hc04 setpin   -> set pin of HC04");
+#endif
 }
 
 
@@ -809,6 +813,26 @@ bool rx_param_changed;
         if (is_cmd("espboot")) {
             // enter esp flashing, can only be exited by re-powering
             task_pending = TX_TASK_FLASH_ESP;
+#endif
+
+        //-- HC04 module handling
+#ifdef USE_HC04_MODULE
+        } else
+        if (is_cmd("hc04 pt")) {
+            // enter hc04 passthrough, can only be exited by re-powering
+            task_pending = TX_TASK_HC04_PASSTHROUGH;
+        } else
+        if (is_cmd_set_value("hc04 setpin", &value)) { // setpin = value
+            if (value < 1000 || value > 9999) {
+                putsn("err: invalid pin number");
+            } else {
+                char pin_str[32];
+                u16toBCDstr(value, pin_str);
+                remove_leading_zeros(pin_str);
+                puts("HC04 Pin: ");putsn(pin_str);
+                task_pending = TX_TASK_CLI_HC04_SETPIN;
+                task_value = value;
+            }
 #endif
 
         //-- invalid command
