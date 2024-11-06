@@ -5,27 +5,81 @@
 -- https://www.gnu.org/licenses/gpl-3.0.de.html
 -- OlliW @ www.olliw.eu
 -- modify for B/W screen by Jason Wang
+-- multi-page by Brad Bosch
 ----------------------------------------------------------------------
 -- Lua TOOLS script
 ----------------------------------------------------------------------
 -- copy script to SCRIPTS\TOOLS folder on OpenTx SD card
--- works with mLRS v0.3.32 and later, mOTX v33
+-- works with OTX, ETX, mOTX v33
 
-local version = '2023-12-02.00'
+local version = '2024-11-05.00'
 
-local required_tx_mLRS_version_int = 337 -- 'v0.3.37'
-local required_rx_mLRS_version_int = 335 -- 'v0.3.35'
-
+local required_tx_mLRS_version_int = 1000 -- 'v1.0.0'
+local required_rx_mLRS_version_int = 1000 -- 'v1.0.0'
 
 -----------------------------custom param list ---------------------------
--- param idxes of options on main page (max 5 params)
+-- param idxes of options
+-- These are currently sequential and could be calculated, but do it this way to allow for reorganization
 
-local param_idx_list = {}
-param_idx_list[0] = 0 -- BindPhrase -- must not be changed
-param_idx_list[1] = 1 -- Mode
-param_idx_list[2] = 4 -- Param1 = Tx Power
-param_idx_list[3] = 14 -- Param2 = Rx Power
-param_idx_list[4] = 17 -- Param3 = Rx Out Mode
+local param_idx_list_main = {}
+param_idx_list_main[0] = 0 -- BindPhrase -- Hard coded index
+param_idx_list_main[1] = 1 -- Mode
+param_idx_list_main[2] = 2 -- RF Band
+param_idx_list_main[3] = 3 -- RF Ortho
+
+local param_idx_list1 = {}
+param_idx_list1[0] = 4 -- Tx Power
+param_idx_list1[1] = 5 -- Tx Diversity
+param_idx_list1[2] = 6 -- Tx Ch Source
+param_idx_list1[3] = 7 -- Tx Ch Order
+param_idx_list1[4] = 8 -- Tx In Mode
+param_idx_list1[5] = 9 -- Tx Ser Dest
+param_idx_list1[6] = 10 -- Tx Ser Baudrate
+
+local param_idx_list2 = {}
+param_idx_list2[0] = 11 -- TX Snd RadioStatus
+param_idx_list2[1] = 12 -- Tx Mav Component
+param_idx_list2[2] = 13 -- Tx Power Sw Ch
+param_idx_list2[3] = 14 -- Tx Buzzer
+param_idx_list2[4] = 15 -- Rx Power
+param_idx_list2[5] = 16 -- Rx Diversity
+param_idx_list2[6] = 17 -- Rx Ch Order
+
+local param_idx_list3 = {}
+param_idx_list3[0] = 18 -- Rx Out Mode
+param_idx_list3[1] = 19 -- Rx Failsafe Mode
+param_idx_list3[2] = 20 -- Rx Ser Port
+param_idx_list3[3] = 21 -- Rx Ser Baudrate
+param_idx_list3[4] = 22 -- RX Ser Link Mode
+param_idx_list3[5] = 23 -- Rx Snd RadioStatus
+param_idx_list3[6] = 24 -- Rx Snd RcChannels
+
+local param_idx_list4 = {}
+param_idx_list4[0] = 25 -- Rx Out Rssi Ch
+param_idx_list4[1] = 26 -- Rx Out LQ Ch
+param_idx_list4[2] = 27 -- Rx Power Sw Ch
+param_idx_list4[3] = 28 -- Rx FS Ch1
+param_idx_list4[4] = 29 -- 
+param_idx_list4[5] = 30 -- 
+param_idx_list4[6] = 31 -- 
+
+local param_idx_list5 = {}
+param_idx_list5[0] = 32 -- 
+param_idx_list5[1] = 33 -- 
+param_idx_list5[2] = 34 -- 
+param_idx_list5[3] = 35 -- 
+param_idx_list5[4] = 36 -- 
+param_idx_list5[5] = 37 -- 
+param_idx_list5[6] = 38 -- 
+
+local param_idx_list6 = {}
+param_idx_list6[0] = 39 -- 
+param_idx_list6[1] = 40 -- 
+param_idx_list6[2] = 41 -- 
+param_idx_list6[3] = 42 -- 
+param_idx_list6[4] = 43 -- Rx FS Ch16
+param_idx_list6[5] = 44 -- 
+param_idx_list6[6] = 45 -- 
 
 
 -- experimental
@@ -36,34 +90,48 @@ local disableParamLoadErrorWarnings = false
 ----------------------------------------------------------------------
 -- black/white helper
 ----------------------------------------------------------------------
-
+local Current_Page = 0
+local Max_Page = 6
+local last_cmd = 0
+local last_idx = 0
 -- idxes of options on main page
 -- param (max 5)
 local BindPhrase_idx = 0 -- must not be changed
 local Mode_idx = 1
 local Param1_idx = 2
 local Param2_idx = 3
-local Param3_idx = 4
 
--- cmd (max 4)
-local Save_idx = 5
-local Reload_idx = 6
-local Bind_idx = 7
+-- tools (max 4)
+local Bind_main_idx = 4
+local Boot_main_idx = 5
 
-local PAGE_MAIN_CURSOR_IDX_PARAM_MAX = Save_idx - 1
-local PAGE_MAIN_CURSOR_IDX_MAX = Bind_idx
+-- save/load/nav (max 4)
+local Save_main_idx = 6
+local Reload_main_idx = 7
+local Prev_main_idx = 8
+local Next_main_idx = 9
+
+local Save_idx = 7
+local Reload_idx = 8
+local Prev_idx = 9
+local Next_idx = 10
+
+local PAGE_MAIN_CURSOR_IDX_PARAM_MAX = Bind_main_idx - 1
+local PAGE_MAIN_CURSOR_IDX_MAX = Next_main_idx
+local PAGE_CURSOR_IDX_PARAM_MAX = Save_idx - 1
+local PAGE_CURSOR_IDX_MAX = Next_idx
 
 -- convert cmd id to param list index
-local function cmd_to_list_index(pidx)
-    for idx = 0, 4 do
+local function cmd_to_list_index(pidx, param_idx_list)
+    for idx = 0, #param_idx_list do
         if (param_idx_list[idx] == pidx) then return true,idx; end
     end
     return false
 end
 
 -- convert param list index to cmd id
-local function list_index_to_cmd(idx)
-    if (idx <= 4) then return true, param_idx_list[idx]; end
+local function list_index_to_cmd(idx, param_idx_list)
+    if (idx <= #param_idx_list) then return true, param_idx_list[idx]; end
     return false
 end
 
@@ -269,8 +337,8 @@ local DEVICE_ITEM_RX = nil
 local DEVICE_INFO = nil
 local DEVICE_PARAM_LIST = nil
 local DEVICE_PARAM_LIST_expected_index = 0
-local DEVICE_PARAM_LIST_current_index = -1
-local DEVICE_PARAM_LIST_errors = 0
+local DEVICE_PARAM_LIST_current = -1
+local DEVICE_PARAM_LIST_error = 0
 local DEVICE_PARAM_LIST_complete = false
 local DEVICE_DOWNLOAD_is_running = true -- we start the script with this
 local DEVICE_SAVE_t_last = 0
@@ -282,15 +350,15 @@ local function clearParams()
     DEVICE_INFO = nil
     DEVICE_PARAM_LIST = nil
     DEVICE_PARAM_LIST_expected_index = 0
-    DEVICE_PARAM_LIST_current_index = -1
-    DEVICE_PARAM_LIST_errors = 0
+    DEVICE_PARAM_LIST_current = -1
+    DEVICE_PARAM_LIST_error = 0
     DEVICE_PARAM_LIST_complete = false
     DEVICE_DOWNLOAD_is_running = true
 end
 
 
 local function paramsError(err)
-    DEVICE_PARAM_LIST_errors = DEVICE_PARAM_LIST_errors + 1
+    DEVICE_PARAM_LIST_error = DEVICE_PARAM_LIST_error * 100 + err
 end
 
 
@@ -433,26 +501,36 @@ end
 -- looper to send and read command frames
 ----------------------------------------------------------------------
 
-local function doParamLoop()
+local function doParamLoop(param_idx_list, page)
     -- trigger getting device items and param items
     local t_10ms = getTime()
-    if t_10ms - paramloop_t_last > 33 then -- was 10 = 100 ms
+    if t_10ms - paramloop_t_last > 15 then -- was 10 = 100 ms
       paramloop_t_last = t_10ms
       if t_10ms < DEVICE_SAVE_t_last + paramLoadDeadTime_10ms then
           -- skip, we don't send a cmd if the last Save was recent
-      elseif DEVICE_ITEM_TX == nil then
+      elseif DEVICE_ITEM_TX == nil and page == 0 then
           cmdPush(MBRIDGE_CMD_REQUEST_INFO, {}) -- triggers sending DEVICE_ITEM_TX, DEVICE_ITEM_RX, INFO
           --cmdPush(MBRIDGE_CMD_REQUEST_CMD, {MBRIDGE_CMD_REQUEST_INFO)
           -- these should have been set when we nil-ed DEVICE_PARAM_LIST
           DEVICE_PARAM_LIST_expected_index = 0
-          DEVICE_PARAM_LIST_current_index = -1
-          DEVICE_PARAM_LIST_errors = 0
+          DEVICE_PARAM_LIST_current = -1
+          DEVICE_PARAM_LIST_error = 0
           DEVICE_PARAM_LIST_complete = false
-      elseif DEVICE_PARAM_LIST == nil then
-          if DEVICE_INFO ~= nil then -- wait for it to be populated
-              DEVICE_PARAM_LIST = {}
-              cmdPush(MBRIDGE_CMD_PARAM_REQUEST_LIST, {}) -- triggers sending full list of PARAM_ITEMs
-              --cmdPush(MBRIDGE_CMD_REQUEST_CMD, {MBRIDGE_CMD_PARAM_REQUEST_LIST})
+      else
+          if DEVICE_INFO ~= nil or page ~= 0 then -- wait for it to be populated
+              if DEVICE_PARAM_LIST == nil then
+                  DEVICE_PARAM_LIST = {}
+              end
+              local valid, requested_param_item = list_index_to_cmd(DEVICE_PARAM_LIST_expected_index, param_idx_list)
+              if valid then
+                  cmdPush(MBRIDGE_CMD_REQUEST_CMD, {MBRIDGE_CMD_PARAM_ITEM, requested_param_item})
+                  last_cmd = 0
+                  last_idx = DEVICE_PARAM_LIST_expected_index
+              else
+                  DEVICE_PARAM_LIST_complete = true
+                  DEVICE_DOWNLOAD_is_running = false
+                  return
+              end
           end
       end
     end
@@ -460,7 +538,10 @@ local function doParamLoop()
     -- handle received commands
     for ijk = 1,6 do -- handle only up to 6 per lua cycle
         local cmd = cmdPop()
-        if cmd == nil then break end
+        if cmd == nil then
+            -- DEVICE_PARAM_LIST_expected_index = DEVICE_PARAM_LIST_expected_index + 1 -- prepare for next
+            break
+        end
         if cmd.cmd == MBRIDGE_CMD_DEVICE_ITEM_TX then
             -- MBRIDGE_CMD_DEVICE_ITEM_TX
             DEVICE_ITEM_TX = cmd
@@ -481,6 +562,9 @@ local function doParamLoop()
             -- MBRIDGE_CMD_INFO
             DEVICE_INFO = cmd
             DEVICE_INFO.receiver_sensitivity = mb_to_i16(cmd.payload,0)
+            -- DEVICE_INFO.has_status = mb_to_u8_bits(cmd.payload, 2, 0, 0x01)
+            -- DEVICE_INFO.binding = mb_to_u8_bits(cmd.payload, 2, 1, 0x01)
+            -- DEVICE_INFO.LQ_low = 0 -- mb_to_u8_bits(cmd.payload, 2, 3, 0x03)
             DEVICE_INFO.tx_power_dbm = mb_to_i8(cmd.payload,3)
             DEVICE_INFO.rx_power_dbm = mb_to_i8(cmd.payload,4)
             DEVICE_INFO.rx_available = mb_to_u8_bits(cmd.payload,5,0,0x1)
@@ -491,16 +575,21 @@ local function doParamLoop()
             DEVICE_INFO.rx_diversity = mb_to_u8_bits(cmd.payload,7,4,0x0F)
         elseif cmd.cmd == MBRIDGE_CMD_PARAM_ITEM then
             -- MBRIDGE_CMD_PARAM_ITEM
-            local index = cmd.payload[0]
-            if index ~= DEVICE_PARAM_LIST_expected_index and index ~= 255 then
-                paramsError()
+            last_cmd = cmd.cmd
+            local param_index = cmd.payload[0]
+            local valid, requested_param_item = list_index_to_cmd(DEVICE_PARAM_LIST_expected_index, param_idx_list)
+            DEVICE_PARAM_LIST_expected_index = DEVICE_PARAM_LIST_expected_index + 1 -- prepare for next
+            if param_index ~= requested_param_item then -- and param_index ~= 255 then
+                break -- Does not exist, skip
+                -- paramsError(1)
+                -- paramsError(param_index)
+                -- paramsError(requested_param_item)
             end
-            DEVICE_PARAM_LIST_current_index = index -- inform potential Item2/3 calls
-            DEVICE_PARAM_LIST_expected_index = index + 1 -- prepare for next
+            DEVICE_PARAM_LIST_current = param_index -- inform potential Item2/3 calls
             if DEVICE_PARAM_LIST == nil then
-                paramsError()
-            elseif index < 128 then
-                local valid,index = cmd_to_list_index(index)
+                paramsError(2)
+            elseif param_index < 128 then
+                local valid,index = cmd_to_list_index(param_index, param_idx_list)
                 if valid then
                     DEVICE_PARAM_LIST[index] = cmd
                     DEVICE_PARAM_LIST[index].typ = mb_to_u8(cmd.payload, 1)
@@ -512,33 +601,36 @@ local function doParamLoop()
                     DEVICE_PARAM_LIST[index].options = {}
                     DEVICE_PARAM_LIST[index].allowed_mask = 65536
                     DEVICE_PARAM_LIST[index].editable = true
+                else
+                    paramsError(14)
                 end
-            elseif index == 255 then -- EOL (end of list :)
-                if DEVICE_PARAM_LIST_errors == 0 then
+            elseif param_index == 255 then -- EOL (end of list :)
+                if DEVICE_PARAM_LIST_error == 0 then
                     DEVICE_PARAM_LIST_complete = true
                 elseif disableParamLoadErrorWarnings then -- ignore any errors
                     DEVICE_PARAM_LIST_complete = true
                 else
-                    -- Huston, we have a proble,
+                    -- Huston, we have a problem,
                     DEVICE_PARAM_LIST_complete = false
-                    setPopupWTmo("Param Upload Errors ("..tostring(DEVICE_PARAM_LIST_errors)..")!\nTry Reload", 200)
+                    setPopupWTmo("Er("..tostring(DEVICE_PARAM_LIST_error)..")!\nTry Reload", 300)
                 end
                 DEVICE_DOWNLOAD_is_running = false
             else
-                paramsError()
+                paramsError(3)
             end
         elseif cmd.cmd == MBRIDGE_CMD_PARAM_ITEM2 then
             -- MBRIDGE_CMD_PARAM_ITEM2
-            local index = cmd.payload[0]
-            if index ~= DEVICE_PARAM_LIST_current_index then
-                paramsError()
+            last_cmd = cmd.cmd
+            local param_index = cmd.payload[0]
+            if param_index ~= DEVICE_PARAM_LIST_current then
+                paramsError(4)
             elseif DEVICE_PARAM_LIST == nil then
-                paramsError()
+                paramsError(5)
             else
-                local valid,index = cmd_to_list_index(index)
+                local valid,index = cmd_to_list_index(param_index, param_idx_list)
                 if valid then
                     if DEVICE_PARAM_LIST[index] == nil then
-                        paramsError()
+                        paramsError(6)
                     elseif DEVICE_PARAM_LIST[index].typ < MBRIDGE_PARAM_TYPE_LIST then
                         DEVICE_PARAM_LIST[index].min = mb_to_value(cmd.payload, 1, DEVICE_PARAM_LIST[index].typ)
                         DEVICE_PARAM_LIST[index].max = mb_to_value(cmd.payload, 3, DEVICE_PARAM_LIST[index].typ)
@@ -547,54 +639,63 @@ local function doParamLoop()
                         DEVICE_PARAM_LIST[index].allowed_mask = mb_to_u16(cmd.payload, 1)
                         DEVICE_PARAM_LIST[index].options = mb_to_options(cmd.payload, 3, 21)
                         DEVICE_PARAM_LIST[index].item2payload = cmd.payload
+                        if DEVICE_PARAM_LIST[index].item2payload == nil then
+                            paramsError(15)
+                        end
                         DEVICE_PARAM_LIST[index].min = 0
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
                         DEVICE_PARAM_LIST[index].editable = mb_allowed_mask_editable(DEVICE_PARAM_LIST[index].allowed_mask)
                     elseif DEVICE_PARAM_LIST[index].typ == MBRIDGE_PARAM_TYPE_STR6 then
                         -- nothing to do, is send but hasn't any content
                     else
-                        paramsError()
+                        paramsError(7)
                     end
+                else
+                    paramsError(15)
                 end
             end
         elseif cmd.cmd == MBRIDGE_CMD_PARAM_ITEM3 then
             -- MBRIDGE_CMD_PARAM_ITEM3
-            local index = cmd.payload[0]
+            last_cmd = cmd.cmd
+            local param_index = cmd.payload[0]
             local is_item4 = false
-            if (index >= 128) then -- this is actually ITEM4
-                index = index - 128;
+            if (param_index >= 128) then -- this is actually ITEM4
+                param_index = param_index - 128;
                 is_item4 = true
+                last_cmd = cmd.cmd + 1
             end
-            if index ~= DEVICE_PARAM_LIST_current_index then
-                paramsError()
+            if param_index ~= DEVICE_PARAM_LIST_current then
+                paramsError(8)
             elseif DEVICE_PARAM_LIST == nil then
-                paramsError()
+                paramsError(9)
             else
-                local valid,index = cmd_to_list_index(index)
+                local valid,index = cmd_to_list_index(param_index, param_idx_list)
                 if valid then
                     if DEVICE_PARAM_LIST[index] == nil then
-                        paramsError()
+                        paramsError(10)
                     elseif DEVICE_PARAM_LIST[index].typ ~= MBRIDGE_PARAM_TYPE_LIST then
-                        paramsError()
-                    elseif DEVICE_PARAM_LIST[index].item2payload == nil then
-                        paramsError()
+                        paramsError(11)
+                    elseif DEVICE_PARAM_LIST[index].item2payload == nil and not is_item4 then
+                        paramsError(12)
+                        -- paramsError(index)
+                        -- paramsError(last_idx)
+                        -- paramsError(last_cmd)
                     elseif is_item4 and DEVICE_PARAM_LIST[index].item3payload == nil then
-                        paramsError()
+                        paramsError(13)
                     else
                         local s = DEVICE_PARAM_LIST[index].item2payload
                         if not is_item4 then
                             DEVICE_PARAM_LIST[index].item3payload = cmd.payload
                             for i=1,23 do s[23+i] = cmd.payload[i] end
                             DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23)
-                            DEVICE_PARAM_LIST[index].item2payload = nil
-                        else    
+                        else
                             local s3 = DEVICE_PARAM_LIST[index].item3payload
                             for i=1,23 do s[23+i] = s3[i]; s[23+23+i] = cmd.payload[i]; end
                             DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23+23)
-                            DEVICE_PARAM_LIST[index].item2payload = nil
-                            DEVICE_PARAM_LIST[index].item3payload = nil
+                            DEVICE_PARAM_LIST[index].item2payload = nil -- ???
+                            DEVICE_PARAM_LIST[index].item3payload = nil -- ???
                             s3 = nil
-                        end    
+                        end
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
                         s = nil
                     end
@@ -603,13 +704,20 @@ local function doParamLoop()
         end
         cmd = nil
     end --for
+    if DEVICE_PARAM_LIST_error > 0 then
+        if not disableParamLoadErrorWarnings then -- ignore any errors
+            -- Huston, we have a problem,
+            DEVICE_PARAM_LIST_complete = false
+            setPopupWTmo("Er("..tostring(DEVICE_PARAM_LIST_error)..")!\nTry Reload", 300)
+        end
+    end
 end
 
 
-local function sendParamSet(idx)
+local function sendParamSet(idx, param_idx_list)
     if not DEVICE_PARAM_LIST_complete then return end -- needed here??
     local p = DEVICE_PARAM_LIST[idx]
-    local valid,idx = list_index_to_cmd(idx)
+    local valid,idx = list_index_to_cmd(idx, param_idx_list)
     if not valid then return end
     if p.typ < MBRIDGE_PARAM_TYPE_LIST then
         cmdPush(MBRIDGE_CMD_PARAM_SET, {idx, p.value})
@@ -641,11 +749,19 @@ local function sendBind()
 end
 
 
+local function sendBoot()
+    --if not DEVICE_PARAM_LIST_complete then return end -- needed here??
+    if DEVICE_DOWNLOAD_is_running then return end
+    cmdPush(MBRIDGE_CMD_SYSTEM_BOOTLOADER, {})
+    setPopupBlocked("In System Bootloader")
+end
+
+
 ----------------------------------------------------------------------
 -- Edit stuff
 ----------------------------------------------------------------------
 
-local cursor_idx = Param1_idx
+local cursor_idx = Mode_idx
 local edit = false
 local option_value = 0
 
@@ -809,10 +925,17 @@ local function drawPageMain()
         end
     end
 
+    -- Tools
+    y = liney(4)
+    lcd.drawText(0, y, "bind", cur_attr(Bind_main_idx))
+    lcd.drawText(LCD_W/4, y, "boot", cur_attr(Boot_main_idx))
+
+    -- Save/Load and Navigation
     y = liney(5)
-    lcd.drawText(0, y, "save", cur_attr(Save_idx))
-    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_idx))
-    lcd.drawText(LCD_W/2, y, "bind", cur_attr(Bind_idx))
+    lcd.drawText(0, y, "save", cur_attr(Save_main_idx))
+    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_main_idx))
+    lcd.drawText(LCD_W/2, y, "prev", cur_attr(Prev_main_idx))
+    lcd.drawText(LCD_W*3/4, y, "next", cur_attr(Next_main_idx))
 
     y = liney(6)
     attr = SMLSIZE + TEXT_COLOR
@@ -838,7 +961,7 @@ local function drawPageMain()
     end
 
     if not connected then
-        lcd.drawText(LCD_W/2, y, "disconect", attr)
+        lcd.drawText(LCD_W/2, y, "disconnected", attr)
     elseif not DEVICE_PARAM_LIST_complete then
         lcd.drawText(LCD_W/2, y, "loading..", attr)
     elseif DEVICE_ITEM_RX ~= nil then
@@ -848,19 +971,28 @@ local function drawPageMain()
     end
 end
 
-
-local function doPageMain(event)
+local function doPageMain(event, param_idx_list)
     if not edit then
         if event == EVT_VIRTUAL_EXIT then
             -- nothing to do
         elseif event == EVT_VIRTUAL_ENTER then
-            if cursor_idx == Save_idx and DEVICE_PARAM_LIST_complete then -- Save pressed
+            if cursor_idx == Save_main_idx and DEVICE_PARAM_LIST_complete then -- Save pressed
                 sendParamStore()
                 clearParams()
-            elseif cursor_idx == Reload_idx then -- Reload pressed
-                clearParams()
-            elseif cursor_idx == Bind_idx then -- Bind pressed
+            elseif cursor_idx == Bind_main_idx then -- Bind pressed
                 sendBind()
+            elseif cursor_idx == Boot_main_idx then -- Boot pressed
+                sendBoot()
+            elseif cursor_idx == Reload_main_idx then -- Reload pressed
+                clearParams()
+            elseif cursor_idx == Prev_main_idx then -- Prev pressed
+                clearParams()
+                Current_Page = Max_Page
+                cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
+            elseif cursor_idx == Next_main_idx then -- Next pressed
+                clearParams()
+                cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
+                Current_Page = Current_Page + 1
             elseif DEVICE_PARAM_LIST_complete then -- edit option
                 cursor_x_idx = 0
                 edit = true
@@ -872,20 +1004,20 @@ local function doPageMain(event)
             cursor_idx = cursor_idx - 1
             if cursor_idx < 0 then cursor_idx = 0 end
         end
-    else
+    else -- edit
         if event == EVT_VIRTUAL_EXIT then
             if cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- BindPhrase, user defined params
-                sendParamSet(cursor_idx)
+                sendParamSet(cursor_idx, param_idx_list)
             end
             edit = false
         elseif event == EVT_VIRTUAL_ENTER then
             if cursor_idx == BindPhrase_idx then -- BindPhrase
                 if param_str6_next(0) then
-                    sendParamSet(0)
+                    sendParamSet(0, param_idx_list)
                     edit = false
                 end
             elseif cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- user defined params
-                sendParamSet(cursor_idx)
+                sendParamSet(cursor_idx, param_idx_list)
                 edit = false
             else
                 edit = false
@@ -908,6 +1040,106 @@ local function doPageMain(event)
     drawPageMain()
 end
 
+----------------------------------------------------------------------
+-- Params Pages
+----------------------------------------------------------------------
+
+local function drawPage()
+    local x, y;
+
+    if DEVICE_DOWNLOAD_is_running then
+        lcd.drawText(LCD_W/3, LCD_H-24, "MLRS", DBLSIZE+TEXT_COLOR+BLINK+INVERS)
+        lcd.drawText(12, LCD_H-9, "parameters loading ...", TEXT_COLOR+BLINK+INVERS)
+        return
+    end
+
+    y = liney(0)
+
+    if DEVICE_PARAM_LIST_complete then
+        for i=0,PAGE_CURSOR_IDX_PARAM_MAX do
+            if DEVICE_PARAM_LIST[i] ~= nil and DEVICE_PARAM_LIST[i].name ~= nil then
+                lcd.drawText(0, liney(i), string.sub(DEVICE_PARAM_LIST[i].name, 1, 14), TEXT_COLOR)
+                if DEVICE_PARAM_LIST[i].typ < MBRIDGE_PARAM_TYPE_LIST then
+                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].value.." "..DEVICE_PARAM_LIST[i].unit, cur_attr(i))
+                else
+                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].options[DEVICE_PARAM_LIST[i].value], cur_attr(i))
+                end
+            else
+                lcd.drawText(LCD_W*2/3, liney(i), ".", cur_attr(i))
+            end
+        end
+    end
+
+    -- Save/Load and Navigation
+    y = liney(7)
+    lcd.drawText(0, y, "save", cur_attr(Save_idx))
+    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_idx))
+    lcd.drawText(LCD_W/2, y, "prev", cur_attr(Prev_idx))
+    lcd.drawText(LCD_W*3/4, y, "next", cur_attr(Next_idx))
+
+end
+
+
+local function doPage(event, param_idx_list)
+    if not edit then
+        if event == EVT_VIRTUAL_EXIT then
+            -- nothing to do
+        elseif event == EVT_VIRTUAL_ENTER then
+            if cursor_idx == Save_idx and DEVICE_PARAM_LIST_complete then -- Save pressed
+                sendParamStore()
+                clearParams()
+            elseif cursor_idx == Reload_idx then -- Reload pressed
+                clearParams()
+            elseif cursor_idx == Prev_idx then -- Prev pressed
+                clearParams()
+                Current_Page = Current_Page - 1
+                if Current_Page == 0 then
+                    cursor_idx = cursor_idx - 1 -- 1 fewer positions on page 0; move back to "next"
+                end
+            elseif cursor_idx == Next_idx then -- Next pressed
+                clearParams()
+                Current_Page = Current_Page + 1
+                if Current_Page > Max_Page then
+                    Current_Page = 0
+                    cursor_idx = cursor_idx - 1 -- 1 fewer positions on page 0; move back to "next"
+                end
+            elseif DEVICE_PARAM_LIST_complete then -- edit option
+                cursor_x_idx = 0
+                edit = true
+            end
+        elseif event == EVT_VIRTUAL_NEXT then -- and DEVICE_PARAM_LIST_complete then
+            cursor_idx = cursor_idx + 1
+            if cursor_idx > PAGE_CURSOR_IDX_MAX then cursor_idx = PAGE_CURSOR_IDX_MAX end
+        elseif event == EVT_VIRTUAL_PREV then -- and DEVICE_PARAM_LIST_complete then
+            cursor_idx = cursor_idx - 1
+            if cursor_idx < 0 then cursor_idx = 0 end
+        end
+    else -- edit
+        if event == EVT_VIRTUAL_EXIT then
+            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- BindPhrase, user defined params
+                sendParamSet(cursor_idx, param_idx_list)
+            end
+            edit = false
+        elseif event == EVT_VIRTUAL_ENTER then
+            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+                sendParamSet(cursor_idx, param_idx_list)
+                edit = false
+            else
+                edit = false
+            end
+        elseif event == EVT_VIRTUAL_NEXT then
+            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+                param_value_inc(cursor_idx)
+            end
+        elseif event == EVT_VIRTUAL_PREV then
+            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+                param_value_dec(cursor_idx)
+            end
+        end
+    end
+
+    drawPage()
+end
 
 ----------------------------------------------------------------------
 ----------------------------------------------------------------------
@@ -926,8 +1158,28 @@ local function Do(event)
         if not popup then setPopup("Receiver\nhas disconnected!") end
     end
 
-    doParamLoop()
-    doPageMain(event)
+    if Current_Page == 0 then
+        doParamLoop(param_idx_list_main, Current_Page)
+        doPageMain(event, param_idx_list_main)
+    elseif Current_Page == 1 then
+        doParamLoop(param_idx_list1, Current_Page)
+        doPage(event, param_idx_list1)
+    elseif Current_Page == 2 then
+        doParamLoop(param_idx_list2, Current_Page)
+        doPage(event, param_idx_list2)
+    elseif Current_Page == 3 then
+        doParamLoop(param_idx_list3, Current_Page)
+        doPage(event, param_idx_list3)
+    elseif Current_Page == 4 then
+        doParamLoop(param_idx_list4, Current_Page)
+        doPage(event, param_idx_list4)
+    elseif Current_Page == 5 then
+        doParamLoop(param_idx_list5, Current_Page)
+        doPage(event, param_idx_list5)
+    elseif Current_Page == 6 then
+        doParamLoop(param_idx_list6, Current_Page)
+        doPage(event, param_idx_list6)
+    end
 
     doPopup()
 end
