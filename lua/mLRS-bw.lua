@@ -12,7 +12,7 @@
 -- copy script to SCRIPTS\TOOLS folder on OpenTx SD card
 -- works with OTX, ETX, mOTX v33
 
-local version = '2024-11-07.00'
+-- local version = '2024-11-07.00'
 
 local required_tx_mLRS_version_int = 1000 -- 'v1.0.0'
 local required_rx_mLRS_version_int = 1000 -- 'v1.0.0'
@@ -80,10 +80,10 @@ local function list_index_to_param_idx(idx, page)
 end
 
 --------lines and colors
-local CUSTOM_COLOR = INVERS
+-- local CUSTOM_COLOR = INVERS
 local TEXT_COLOR = 0
 local MENU_TITLE_COLOR = INVERS
-local TEXT_DISABLE_COLOR = 0
+-- local TEXT_DISABLE_COLOR = 0
 
 local function liney(line)
     return 8*line;
@@ -280,8 +280,7 @@ local DEVICE_ITEM_TX = nil
 local DEVICE_ITEM_RX = nil
 local DEVICE_INFO = nil
 local DEVICE_PARAM_LIST = nil
-local item2payload = nil
-local item3payload = nil
+local extra_payload = nil
 local list_index = 0
 local param_index_current = -1
 local DEVICE_PARAM_LIST_error = 0
@@ -349,14 +348,6 @@ local function mb_to_i16(payload, pos)
     local v = payload[pos+0] + payload[pos+1]*256
     if v >= 32768 then v = v - 65536 end
     return v
-end
-
-local function mb_to_u24(payload, pos)
-    return payload[pos+0] + payload[pos+1]*256 + payload[pos+2]*256*256
-end
-
-local function mb_to_u32(payload, pos)
-    return payload[pos+0] + payload[pos+1]*256 + payload[pos+2]*256*256 + payload[pos+2]*256*256*256
 end
 
 local function mb_to_value(payload, pos, typ)
@@ -452,8 +443,7 @@ local function doParamLoop(page)
           cmdPush(MBRIDGE_CMD_REQUEST_INFO, {}) -- triggers sending DEVICE_ITEM_TX, DEVICE_ITEM_RX, INFO
       else
           if DEVICE_INFO ~= nil or page ~= 0 then -- wait for it to be populated
-              item2payload = nil
-              item3payload = nil
+              extra_payload = nil
               if DEVICE_PARAM_LIST == nil then
                   DEVICE_PARAM_LIST = {}
               end
@@ -509,15 +499,15 @@ local function doParamLoop(page)
             local param_index = cmd.payload[0]
             local valid, param_item = list_index_to_param_idx(list_index, page)
             list_index = list_index + 1 -- prepare for next
-            if param_index ~= param_item then -- and param_index ~= 255 then
-                break -- Old response or does not exist?, skip
+            if param_index ~= param_item then
+                break -- unexpected skip
             end
-            param_index_current = param_index -- inform potential Item2/3 calls
             if DEVICE_PARAM_LIST == nil then
-                paramsError(2)
-            elseif param_index < 128 then
+                paramsError(1)
+            else
                 local valid,index = param_idx_to_list_index(param_index, page)
                 if valid then
+                    param_index_current = param_index -- inform potential Item2/3 calls
                     DEVICE_PARAM_LIST[index] = cmd
                     DEVICE_PARAM_LIST[index].typ = mb_to_u8(cmd.payload, 1)
                     DEVICE_PARAM_LIST[index].name = mb_to_string(cmd.payload, 2, 16)
@@ -529,51 +519,34 @@ local function doParamLoop(page)
                     DEVICE_PARAM_LIST[index].allowed_mask = 65536
                     DEVICE_PARAM_LIST[index].editable = true
                 else
-                    paramsError(14)
+                    paramsError(2)
                 end
-            elseif param_index == 255 then -- EOL (end of list :)
-                if DEVICE_PARAM_LIST_error == 0 then
-                    DEVICE_PARAM_LIST_complete = true
-                elseif disableParamLoadErrorWarnings then -- ignore any errors
-                    DEVICE_PARAM_LIST_complete = true
-                else
-                    -- Huston, we have a problem,
-                    DEVICE_PARAM_LIST_complete = false
-                    setPopupWTmo("Er("..tostring(DEVICE_PARAM_LIST_error)..")!\nTry Reload", 300)
-                end
-                DEVICE_DOWNLOAD_is_running = false
-            else
-                paramsError(3)
             end
         elseif cmd.cmd == MBRIDGE_CMD_PARAM_ITEM2 then
             local param_index = cmd.payload[0]
             if param_index ~= param_index_current then
-                paramsError(4)
-            elseif DEVICE_PARAM_LIST == nil then
-                paramsError(5)
+                paramsError(3)
             else
                 local valid,index = param_idx_to_list_index(param_index, page)
                 if valid then
-                    if DEVICE_PARAM_LIST[index] == nil then
-                        paramsError(6)
-                    elseif DEVICE_PARAM_LIST[index].typ < MBRIDGE_PARAM_TYPE_LIST then
+                    if DEVICE_PARAM_LIST[index].typ < MBRIDGE_PARAM_TYPE_LIST then
                         DEVICE_PARAM_LIST[index].min = mb_to_value(cmd.payload, 1, DEVICE_PARAM_LIST[index].typ)
                         DEVICE_PARAM_LIST[index].max = mb_to_value(cmd.payload, 3, DEVICE_PARAM_LIST[index].typ)
                         DEVICE_PARAM_LIST[index].unit = mb_to_string(cmd.payload, 7, 6)
                     elseif DEVICE_PARAM_LIST[index].typ == MBRIDGE_PARAM_TYPE_LIST then
                         DEVICE_PARAM_LIST[index].allowed_mask = mb_to_u16(cmd.payload, 1)
                         DEVICE_PARAM_LIST[index].options = mb_to_options(cmd.payload, 3, 21)
-                        item2payload = cmd.payload
+                        extra_payload = cmd.payload
                         DEVICE_PARAM_LIST[index].min = 0
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
                         DEVICE_PARAM_LIST[index].editable = mb_allowed_mask_editable(DEVICE_PARAM_LIST[index].allowed_mask)
                     elseif DEVICE_PARAM_LIST[index].typ == MBRIDGE_PARAM_TYPE_STR6 then
-                        -- nothing to do, is send but hasn't any content
+                        -- nothing to do, is sent but hasn't any content
                     else
-                        paramsError(7)
+                        paramsError(4)
                     end
                 else
-                    paramsError(15)
+                    paramsError(5)
                 end
             end
         elseif cmd.cmd == MBRIDGE_CMD_PARAM_ITEM3 then
@@ -584,38 +557,25 @@ local function doParamLoop(page)
                 is_item4 = true
             end
             if param_index ~= param_index_current then
-                paramsError(8)
-            elseif DEVICE_PARAM_LIST == nil then
-                paramsError(9)
+                paramsError(6)
             else
                 local valid,index = param_idx_to_list_index(param_index, page)
                 if valid then
-                    if DEVICE_PARAM_LIST[index] == nil then
-                        paramsError(10)
-                    elseif DEVICE_PARAM_LIST[index].typ ~= MBRIDGE_PARAM_TYPE_LIST then
-                        paramsError(11)
-                    elseif item2payload == nil and not is_item4 then
-                        paramsError(12)
+                    if DEVICE_PARAM_LIST[index].typ ~= MBRIDGE_PARAM_TYPE_LIST then
+                        paramsError(7)
+                    elseif extra_payload == nil then
+                        paramsError(8)
                         -- paramsError(index)
-                    elseif is_item4 and item3payload == nil then
-                        paramsError(13)
                     else
-                        local s = item2payload
                         if not is_item4 then
-                            item3payload = cmd.payload
-                            for i=1,23 do s[23+i] = cmd.payload[i] end
-                            DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23)
-                            -- item2payload = nil
+                            for i=1,23 do extra_payload[23+i] = cmd.payload[i] end
+                            DEVICE_PARAM_LIST[index].options = mb_to_options(extra_payload, 3, 21+23)
                         else
-                            local s3 = item3payload
-                            for i=1,23 do s[23+i] = s3[i]; s[23+23+i] = cmd.payload[i]; end
-                            DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23+23)
-                            item2payload = nil
-                            item3payload = nil
-                            s3 = nil
+                            for i=1,23 do extra_payload[23+23+i] = cmd.payload[i]; end
+                            DEVICE_PARAM_LIST[index].options = mb_to_options(extra_payload, 3, 21+23+23)
+                            extra_payload = nil
                         end
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
-                        s = nil
                     end
                 end
             end
@@ -1098,6 +1058,7 @@ end
 ----------------------------------------------------------------------
 
 local function scriptInit()
+    checkmem()
     DEVICE_DOWNLOAD_is_running = true -- we start the script with this
     local tnow_10ms = getTime()
     if tnow_10ms < 300 then
@@ -1109,6 +1070,7 @@ end
 
 
 local function scriptRun(event)
+    checkmem()
     if event == nil then
         error("Cannot be run as a model script!")
         return 2
@@ -1129,4 +1091,5 @@ local function scriptRun(event)
     return 0
 end
 
+checkmem()
 return { init=scriptInit, run=scriptRun }
