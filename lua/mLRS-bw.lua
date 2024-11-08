@@ -29,9 +29,9 @@ local Max_Page = 6 -- It would be nice if MBRIDGE_CMD_INFO message included the 
 
 -- idxes of options on main page
 local BindPhrase_idx = 0 -- must not be changed
-local Mode_idx = 1
-local Param2_idx = 2
-local Param3_idx = 3
+-- local Mode_idx = 1
+-- local Param2_idx = 2
+-- local Param3_idx = 3
 
 -- tools (max 4)
 local Bind_main_idx = 4
@@ -280,15 +280,27 @@ local DEVICE_ITEM_TX = nil
 local DEVICE_ITEM_RX = nil
 local DEVICE_INFO = nil
 local DEVICE_PARAM_LIST = nil
+local item2payload = nil
+local item3payload = nil
 local list_index = 0
 local param_index_current = -1
 local DEVICE_PARAM_LIST_error = 0
 local DEVICE_PARAM_LIST_complete = false
 local DEVICE_DOWNLOAD_is_running = true -- we start the script with this
 local DEVICE_SAVE_t_last = 0
+local mem_max1 = 0
+local mem_max2 = 0
 
+local function checkmem()
+    local mem = collectgarbage("count")
+    if mem > mem_max1 then mem_max1 = mem end
+    collectgarbage("collect")
+    local mem = collectgarbage("count")
+    if mem > mem_max2 then mem_max2 = mem end
+end
 
 local function clearParams()
+    checkmem()
     DEVICE_ITEM_TX = nil
     DEVICE_ITEM_RX = nil
     DEVICE_INFO = nil
@@ -370,22 +382,6 @@ local function mb_to_value_or_str6(payload, pos, typ)
     end
 end
 
---[[
-local function mb_to_options(payload, pos, len)
-    local str = ""
-    for i = 0,len-1 do
-        if payload[pos+i] == 0 then break end
-        str = str .. string.char(payload[pos+i])
-    end
-    str = str .. ","
-    local opt = {};
-    for s in string.gmatch(str, "([^,]+)") do
-        table.insert(opt, s)
-    end
-    return opt
-end
---]]
-
 local function mb_to_options(payload, pos, len)
     local r = {}
     local idx = 0
@@ -456,6 +452,8 @@ local function doParamLoop(page)
           cmdPush(MBRIDGE_CMD_REQUEST_INFO, {}) -- triggers sending DEVICE_ITEM_TX, DEVICE_ITEM_RX, INFO
       else
           if DEVICE_INFO ~= nil or page ~= 0 then -- wait for it to be populated
+              item2payload = nil
+              item3payload = nil
               if DEVICE_PARAM_LIST == nil then
                   DEVICE_PARAM_LIST = {}
               end
@@ -473,6 +471,7 @@ local function doParamLoop(page)
 
     -- handle received commands
     for ijk = 1,6 do -- handle only up to 6 per lua cycle
+        checkmem()
         local cmd = cmdPop()
         if cmd == nil then
             -- list_index = list_index + 1 -- error, skip?
@@ -564,10 +563,7 @@ local function doParamLoop(page)
                     elseif DEVICE_PARAM_LIST[index].typ == MBRIDGE_PARAM_TYPE_LIST then
                         DEVICE_PARAM_LIST[index].allowed_mask = mb_to_u16(cmd.payload, 1)
                         DEVICE_PARAM_LIST[index].options = mb_to_options(cmd.payload, 3, 21)
-                        DEVICE_PARAM_LIST[index].item2payload = cmd.payload
-                        if DEVICE_PARAM_LIST[index].item2payload == nil then
-                            paramsError(15)
-                        end
+                        item2payload = cmd.payload
                         DEVICE_PARAM_LIST[index].min = 0
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
                         DEVICE_PARAM_LIST[index].editable = mb_allowed_mask_editable(DEVICE_PARAM_LIST[index].allowed_mask)
@@ -598,23 +594,24 @@ local function doParamLoop(page)
                         paramsError(10)
                     elseif DEVICE_PARAM_LIST[index].typ ~= MBRIDGE_PARAM_TYPE_LIST then
                         paramsError(11)
-                    elseif DEVICE_PARAM_LIST[index].item2payload == nil and not is_item4 then
+                    elseif item2payload == nil and not is_item4 then
                         paramsError(12)
                         -- paramsError(index)
-                    elseif is_item4 and DEVICE_PARAM_LIST[index].item3payload == nil then
+                    elseif is_item4 and item3payload == nil then
                         paramsError(13)
                     else
-                        local s = DEVICE_PARAM_LIST[index].item2payload
+                        local s = item2payload
                         if not is_item4 then
-                            DEVICE_PARAM_LIST[index].item3payload = cmd.payload
+                            item3payload = cmd.payload
                             for i=1,23 do s[23+i] = cmd.payload[i] end
                             DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23)
+                            -- item2payload = nil
                         else
-                            local s3 = DEVICE_PARAM_LIST[index].item3payload
+                            local s3 = item3payload
                             for i=1,23 do s[23+i] = s3[i]; s[23+23+i] = cmd.payload[i]; end
                             DEVICE_PARAM_LIST[index].options = mb_to_options(s, 3, 21+23+23)
-                            DEVICE_PARAM_LIST[index].item2payload = nil -- ???
-                            DEVICE_PARAM_LIST[index].item3payload = nil -- ???
+                            item2payload = nil
+                            item3payload = nil
                             s3 = nil
                         end
                         DEVICE_PARAM_LIST[index].max = #DEVICE_PARAM_LIST[index].options
@@ -807,6 +804,7 @@ end
 local function drawPageMain()
     local x, y;
 
+    checkmem()
     if DEVICE_DOWNLOAD_is_running then
         lcd.drawText(LCD_W/3, LCD_H-24, "MLRS", DBLSIZE+TEXT_COLOR+BLINK+INVERS)
         lcd.drawText(12, LCD_H-9, "parameters loading ...", TEXT_COLOR+BLINK+INVERS)
@@ -853,6 +851,8 @@ local function drawPageMain()
     y = liney(4)
     lcd.drawText(0, y, "bind", cur_attr(Bind_main_idx))
     lcd.drawText(LCD_W/4, y, "boot", cur_attr(Boot_main_idx))
+    lcd.drawText(LCD_W/2, y, tostring(mem_max1), TEXT_COLOR)
+    lcd.drawText(LCD_W*3/4, y, tostring(mem_max2), TEXT_COLOR)
 
     -- Save/Load and Navigation
     y = liney(5)
