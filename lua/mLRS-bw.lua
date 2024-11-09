@@ -29,18 +29,12 @@ local Max_Page = 6 -- It would be nice if MBRIDGE_CMD_INFO message included the 
 
 -- idxes of options on main page
 local BindPhrase_idx = 0 -- must not be changed
--- local Mode_idx = 1
--- local Param2_idx = 2
--- local Param3_idx = 3
 
 -- tools (max 4)
 local Bind_main_idx = 4
 local Boot_main_idx = 5
 
 -- save/load/nav (max 4)
-local Save_main_idx = 6
-local Reload_main_idx = 7
-local Prev_main_idx = 8
 local Next_main_idx = 9
 
 local Save_idx = 7
@@ -48,10 +42,9 @@ local Reload_idx = 8
 local Prev_idx = 9
 local Next_idx = 10
 
-local PAGE_MAIN_CURSOR_IDX_PARAM_MAX = Bind_main_idx - 1
-local PAGE_MAIN_CURSOR_IDX_MAX = Next_main_idx
-local PAGE_CURSOR_IDX_PARAM_MAX = Save_idx - 1
-local PAGE_CURSOR_IDX_MAX = Next_idx
+local PAGE_MAIN_CURSOR_IDX_PARAM_MAX = 3
+local PAGE_CURSOR_IDX_PARAM_MAX = 6
+local PAGE_CURSOR_IDX_MAX = Next_idx -- 10
 
 -- convert param id to param list index
 local function param_idx_to_list_index(param_id, page)
@@ -758,19 +751,23 @@ end
 
 
 ----------------------------------------------------------------------
--- Page Main
+-- Render Pages
 ----------------------------------------------------------------------
 
-local function drawPageMain()
-    local x, y;
+local function drawPage()
+    local x, y
+    local s = 0
+    local param_max = PAGE_CURSOR_IDX_PARAM_MAX
 
-    checkmem()
     if DEVICE_DOWNLOAD_is_running then
         lcd.drawText(LCD_W/3, LCD_H-24, "MLRS", DBLSIZE+TEXT_COLOR+BLINK+INVERS)
         lcd.drawText(12, LCD_H-9, "parameters loading ...", TEXT_COLOR+BLINK+INVERS)
         return
     end
 
+  if Current_Page == 0 then
+    checkmem()
+    param_max = PAGE_MAIN_CURSOR_IDX_PARAM_MAX
     local version_error = false
     if DEVICE_ITEM_TX ~= nil and DEVICE_ITEM_TX.version_int < required_tx_mLRS_version_int then
         version_error = true
@@ -795,33 +792,26 @@ local function drawPageMain()
             lcd.drawText(LCD_W*2/3+(i-1)*6, y, c, attr)
         end
     end
+    s = 1
+  end
 
     if DEVICE_PARAM_LIST_complete then
-        for i=1,PAGE_MAIN_CURSOR_IDX_PARAM_MAX do
+        for i=s,param_max do
             if DEVICE_PARAM_LIST[i] ~= nil and DEVICE_PARAM_LIST[i].name ~= nil then
-                lcd.drawText(0, liney(i), DEVICE_PARAM_LIST[i].name, TEXT_COLOR)
-                lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].options[DEVICE_PARAM_LIST[i].value], cur_attr(i))
+                lcd.drawText(0, liney(i), string.sub(DEVICE_PARAM_LIST[i].name, 1, 14), TEXT_COLOR)
+                if DEVICE_PARAM_LIST[i].typ < MBRIDGE_PARAM_TYPE_LIST then
+                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].value.." "..DEVICE_PARAM_LIST[i].unit, cur_attr(i))
+                else
+                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].options[DEVICE_PARAM_LIST[i].value], cur_attr(i))
+                end
             else
                 lcd.drawText(LCD_W*2/3, liney(i), ".", cur_attr(i))
             end
         end
     end
 
-    -- Tools
+  if Current_Page == 0 then
     y = liney(4)
-    lcd.drawText(0, y, "bind", cur_attr(Bind_main_idx))
-    lcd.drawText(LCD_W/4, y, "boot", cur_attr(Boot_main_idx))
-    lcd.drawText(LCD_W/2, y, tostring(mem_max1), TEXT_COLOR)
-    lcd.drawText(LCD_W*3/4, y, tostring(mem_max2), TEXT_COLOR)
-
-    -- Save/Load and Navigation
-    y = liney(5)
-    lcd.drawText(0, y, "save", cur_attr(Save_main_idx))
-    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_main_idx))
-    lcd.drawText(LCD_W/2, y, "prev", cur_attr(Prev_main_idx))
-    lcd.drawText(LCD_W*3/4, y, "next", cur_attr(Next_main_idx))
-
-    y = liney(6)
     attr = SMLSIZE + TEXT_COLOR
     lcd.drawText(0, y, "TxPwr", attr)
     if DEVICE_INFO ~= nil then
@@ -836,7 +826,7 @@ local function drawPageMain()
         lcd.drawText(LCD_W/2, y, "v-.--.--", attr)
     end
 
-    y = liney(7)
+    y = liney(5)
     lcd.drawText(0, y, "RxPwr", attr)
     if DEVICE_INFO ~= nil and DEVICE_INFO.rx_available then
         lcd.drawText(LCD_W/4, y, tostring(DEVICE_INFO.rx_power_dbm).."dBm", attr)
@@ -853,135 +843,58 @@ local function drawPageMain()
     else
         lcd.drawText(LCD_W/2, y, "v-.--.--", attr)
     end
-end
 
-local function doPageMain(event)
-    if not edit then
-        if event == EVT_VIRTUAL_EXIT then
-            -- nothing to do
-        elseif event == EVT_VIRTUAL_ENTER then
-            if cursor_idx == Save_main_idx and DEVICE_PARAM_LIST_complete then -- Save pressed
-                sendParamStore()
-                clearParams()
-            elseif cursor_idx == Bind_main_idx then -- Bind pressed
-                sendBind()
-            elseif cursor_idx == Boot_main_idx then -- Boot pressed
-                sendBoot()
-            elseif cursor_idx == Reload_main_idx then -- Reload pressed
-                clearParams()
-            elseif cursor_idx == Prev_main_idx then -- Prev pressed
-                clearParams()
-                Current_Page = Max_Page
-                cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
-            elseif cursor_idx == Next_main_idx then -- Next pressed
-                clearParams()
-                cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
-                Current_Page = Current_Page + 1
-            elseif DEVICE_PARAM_LIST_complete then -- edit option
-                cursor_x_idx = 0
-                edit = true
-            end
-        elseif event == EVT_VIRTUAL_NEXT then -- and DEVICE_PARAM_LIST_complete then
-            cursor_idx = cursor_idx + 1
-            if cursor_idx > PAGE_MAIN_CURSOR_IDX_MAX then cursor_idx = PAGE_MAIN_CURSOR_IDX_MAX end
-        elseif event == EVT_VIRTUAL_PREV then -- and DEVICE_PARAM_LIST_complete then
-            cursor_idx = cursor_idx - 1
-            if cursor_idx < 0 then cursor_idx = 0 end
-        end
-    else -- edit
-        if event == EVT_VIRTUAL_EXIT then
-            if cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- BindPhrase, user defined params
-                sendParamSet(cursor_idx, Current_Page)
-            end
-            edit = false
-        elseif event == EVT_VIRTUAL_ENTER then
-            if cursor_idx == BindPhrase_idx then -- BindPhrase
-                if param_str6_next(0) then
-                    sendParamSet(0, Current_Page)
-                    edit = false
-                end
-            elseif cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- user defined params
-                sendParamSet(cursor_idx, Current_Page)
-                edit = false
-            else
-                edit = false
-            end
-        elseif event == EVT_VIRTUAL_NEXT then
-            if cursor_idx == BindPhrase_idx then -- BindPhrase
-                param_str6_inc(0)
-            elseif cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- user defined params
-                param_value_inc(cursor_idx)
-            end
-        elseif event == EVT_VIRTUAL_PREV then
-            if cursor_idx == BindPhrase_idx then -- BindPhrase
-                param_str6_dec(0)
-            elseif cursor_idx <= PAGE_MAIN_CURSOR_IDX_PARAM_MAX then -- user defined params
-                param_value_dec(cursor_idx)
-            end
-        end
-    end
-
-    drawPageMain()
-end
-
-----------------------------------------------------------------------
--- Params Pages
-----------------------------------------------------------------------
-
-local function drawPage()
-    local x, y;
-
-    if DEVICE_DOWNLOAD_is_running then
-        lcd.drawText(LCD_W/3, LCD_H-24, "MLRS", DBLSIZE+TEXT_COLOR+BLINK+INVERS)
-        lcd.drawText(12, LCD_H-9, "parameters loading ...", TEXT_COLOR+BLINK+INVERS)
-        return
-    end
-
-    y = liney(0)
-
-    if DEVICE_PARAM_LIST_complete then
-        for i=0,PAGE_CURSOR_IDX_PARAM_MAX do
-            if DEVICE_PARAM_LIST[i] ~= nil and DEVICE_PARAM_LIST[i].name ~= nil then
-                lcd.drawText(0, liney(i), string.sub(DEVICE_PARAM_LIST[i].name, 1, 14), TEXT_COLOR)
-                if DEVICE_PARAM_LIST[i].typ < MBRIDGE_PARAM_TYPE_LIST then
-                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].value.." "..DEVICE_PARAM_LIST[i].unit, cur_attr(i))
-                else
-                    lcd.drawText(LCD_W*2/3, liney(i), DEVICE_PARAM_LIST[i].options[DEVICE_PARAM_LIST[i].value], cur_attr(i))
-                end
-            else
-                lcd.drawText(LCD_W*2/3, liney(i), ".", cur_attr(i))
-            end
-        end
-    end
-
+    -- Tools
+    y = liney(6)
+    lcd.drawText(0, y, "bind", cur_attr(Bind_main_idx))
+    lcd.drawText(LCD_W/4, y, "boot", cur_attr(Boot_main_idx))
+    lcd.drawText(LCD_W/2, y, tostring(mem_max1), TEXT_COLOR)
+    lcd.drawText(LCD_W*3/4, y, tostring(mem_max2), TEXT_COLOR)
+  
+  end
+  
     -- Save/Load and Navigation
     y = liney(7)
-    lcd.drawText(0, y, "save", cur_attr(Save_idx))
-    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_idx))
-    lcd.drawText(LCD_W/2, y, "prev", cur_attr(Prev_idx))
-    lcd.drawText(LCD_W*3/4, y, "next", cur_attr(Next_idx))
-
+    lcd.drawText(0, y, "save", cur_attr(Save_idx - s))
+    lcd.drawText(LCD_W/4, y, "load", cur_attr(Reload_idx - s))
+    lcd.drawText(LCD_W/2, y, "prev", cur_attr(Prev_idx - s))
+    lcd.drawText(LCD_W*3/4, y, "next", cur_attr(Next_idx - s))
 end
 
-
 local function doPage(event)
+    local s = 0
+    if Current_Page == 0 then
+      s = 1
+    end
+
     if not edit then
         if event == EVT_VIRTUAL_EXIT then
             -- nothing to do
         elseif event == EVT_VIRTUAL_ENTER then
-            if cursor_idx == Save_idx and DEVICE_PARAM_LIST_complete then -- Save pressed
+            if cursor_idx == Save_idx - s and DEVICE_PARAM_LIST_complete then -- Save pressed
                 sendParamStore()
                 clearParams()
-            elseif cursor_idx == Reload_idx then -- Reload pressed
+            elseif Current_Page == 0 and cursor_idx == Bind_main_idx then -- Bind pressed
+                sendBind()
+            elseif Current_Page == 0 and cursor_idx == Boot_main_idx then -- Boot pressed
+                sendBoot()
+            elseif cursor_idx == Reload_idx - s then -- Reload pressed
                 clearParams()
-            elseif cursor_idx == Prev_idx then -- Prev pressed
+            elseif cursor_idx == Prev_idx - s then -- Prev pressed
                 clearParams()
                 Current_Page = Current_Page - 1
                 if Current_Page == 0 then
                     cursor_idx = cursor_idx - 1 -- 1 fewer positions on page 0; move back to "next"
                 end
-            elseif cursor_idx == Next_idx then -- Next pressed
+                if Current_Page < 0 then
+                    Current_Page = Max_Page
+                    cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
+                 end
+            elseif cursor_idx == Next_idx - s then -- Next pressed
                 clearParams()
+                if Current_Page == 0 then
+                    cursor_idx = cursor_idx + 1 -- 1 more positions on subsequent pages; move forward to "next"
+                end
                 Current_Page = Current_Page + 1
                 if Current_Page > Max_Page then
                     Current_Page = 0
@@ -993,30 +906,39 @@ local function doPage(event)
             end
         elseif event == EVT_VIRTUAL_NEXT then -- and DEVICE_PARAM_LIST_complete then
             cursor_idx = cursor_idx + 1
-            if cursor_idx > PAGE_CURSOR_IDX_MAX then cursor_idx = PAGE_CURSOR_IDX_MAX end
+            if cursor_idx > PAGE_CURSOR_IDX_MAX - s then cursor_idx = PAGE_CURSOR_IDX_MAX - s end
         elseif event == EVT_VIRTUAL_PREV then -- and DEVICE_PARAM_LIST_complete then
             cursor_idx = cursor_idx - 1
             if cursor_idx < 0 then cursor_idx = 0 end
         end
     else -- edit
         if event == EVT_VIRTUAL_EXIT then
-            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- BindPhrase, user defined params
+            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX - 3 * s then -- BindPhrase, user defined params
                 sendParamSet(cursor_idx, Current_Page)
             end
             edit = false
         elseif event == EVT_VIRTUAL_ENTER then
-            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+            if current_page == 0 and cursor_idx == BindPhrase_idx then -- BindPhrase
+                if param_str6_next(0) then
+                    sendParamSet(0, Current_Page)
+                    edit = false
+                end
+            elseif cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX - 3 * s then -- user defined params
                 sendParamSet(cursor_idx, Current_Page)
                 edit = false
             else
                 edit = false
             end
         elseif event == EVT_VIRTUAL_NEXT then
-            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+            if current_page == 0 and cursor_idx == BindPhrase_idx then -- BindPhrase
+                param_str6_inc(0)
+            elseif cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX - 3 * s then -- user defined params
                 param_value_inc(cursor_idx)
             end
         elseif event == EVT_VIRTUAL_PREV then
-            if cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX then -- user defined params
+            if current_page == 0 and cursor_idx == BindPhrase_idx then -- BindPhrase
+                param_str6_dec(0)
+            elseif cursor_idx <= PAGE_CURSOR_IDX_PARAM_MAX - 3 * s then -- user defined params
                 param_value_dec(cursor_idx)
             end
         end
@@ -1043,11 +965,7 @@ local function Do(event)
     end
 
     doParamLoop(Current_Page)
-    if Current_Page == 0 then
-        doPageMain(event)
-    else
-        doPage(event)
-    end
+    doPage(event)
 
     doPopup()
 end
