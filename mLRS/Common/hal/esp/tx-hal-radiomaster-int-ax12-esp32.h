@@ -42,7 +42,7 @@
 // UARTF = debug port
 
 #define UARTB_USE_SERIAL // serial connected to MCU for MAVLink/firmware update
-#define UARTB_BAUD                460800
+#define UARTB_BAUD                TX_SERIAL_BAUDRATE
 #define UARTB_USE_TX_IO           IO_P1
 #define UARTB_USE_RX_IO           IO_P3
 #define UARTB_TXBUFSIZE           TX_SERIAL_TXBUFSIZE
@@ -50,7 +50,7 @@
 
 #define JR_PIN5_FULL_DUPLEX
 #define UART_USE_SERIAL1 // full duplex CRSF/MBridge (JR pin5)
-#define UART_BAUD                 1870000
+#define UART_BAUD                 400000
 #define UART_USE_TX_IO            IO_P4
 #define UART_USE_RX_IO            IO_P13
 #define UART_TXBUFSIZE            0  // TX FIFO = 128
