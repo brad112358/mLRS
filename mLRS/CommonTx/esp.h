@@ -187,6 +187,9 @@ void tTxEspWifiBridge::Init(
     common_setup = _common_setup;
 
     com = _comport;
+#ifdef DEVICE_HAS_ESP_WIFI_BRIDGE_W_PASSTHRU_VIA_SERIAL
+    com = _serialport; // no dedicated COM port; passthrough bridges via the serial port
+#endif
     ser = nullptr;
     if (tx_setup->SerialDestination == SERIAL_DESTINATION_SERIAL) {
 #ifdef DEVICE_HAS_ESP_WIFI_BRIDGE_ON_SERIAL
