@@ -33,6 +33,8 @@
 #define DEVICE_HAS_ESP_WIFI_BRIDGE_W_PASSTHRU_VIA_SERIAL
 
 
+#define SETUP_OPT_SER_DEST            "Android,wbridge,mbridge"
+
 //-- UARTS
 // UARTB = serial port
 // UARTC = COM (CLI)

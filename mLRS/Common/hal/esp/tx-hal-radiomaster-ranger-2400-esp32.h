@@ -40,6 +40,8 @@
 // The TXBUFSIZE setting for the com affects however the CLI's chunkenizer behavior.
 
 
+#define SETUP_OPT_SER_DEST            "USB,wbridge,mbridge"
+
 //-- UARTS
 // UARTB = serial port
 // UARTC or USB = COM (CLI)

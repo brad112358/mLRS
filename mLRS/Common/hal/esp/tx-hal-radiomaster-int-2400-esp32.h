@@ -38,6 +38,8 @@
 #define DEVICE_HAS_ESP_WIFI_BRIDGE_W_PASSTHRU_VIA_JRPIN5
 
 
+#define SETUP_OPT_SER_DEST            "wbridge,serial2,mbridge"
+
 //-- UARTS
 // UARTB = serial port BT/ESP port
 // UARTC = COM (CLI)

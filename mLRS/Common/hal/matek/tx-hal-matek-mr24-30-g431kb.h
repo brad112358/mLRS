@@ -25,6 +25,8 @@
 #define DEVICE_HAS_IN_ON_JRPIN5_TX
 #define DEVICE_HAS_FAN_ONOFF // FAN_TEMPCONTROLLED_ONOFF was tested to work not so well
 
+#define SETUP_OPT_SER_DEST            "ser/BT,LP,mbridge"
+
 // factory default for Tx module
 // USB-C = com, Tx1/Rx1 = serial w HC04, LPTx1/LPRx1 = serial2
 #define DEVICE_HAS_COM_ON_USB
@@ -38,6 +40,8 @@
 #ifdef MLRS_FEATURE_MATEK_TXMODULE_SIKTELEM
 // default for using mR900-30 as telemetry module (SiK replacement)
 // USB-C = serial, Tx1/Rx1 = serial2, LPTx1/LPRx1 = com
+#undef SETUP_OPT_SER_DEST
+#define SETUP_OPT_SER_DEST            "USB,LP,mbridge"
 #undef DEVICE_HAS_COM_ON_USB
 #undef UARTB_USE_UART1_PA9PA10 // serial
 #undef DEVICE_HAS_HC04_MODULE_ON_SERIAL

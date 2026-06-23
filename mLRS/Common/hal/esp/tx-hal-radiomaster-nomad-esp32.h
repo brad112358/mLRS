@@ -33,6 +33,7 @@
 #define DEVICE_HAS_ESP_WIFI_BRIDGE_ESP32C3
 #define DEVICE_HAS_ESP_WIFI_BRIDGE_BUTTON_FLASH
 
+#define SETUP_OPT_SER_DEST            "USB,wbridge,mbridge"
 
 //-- UARTS
 // UARTB = serial port 
